@@ -1,0 +1,39 @@
+> [!WARNING]
+> Please note you must have the admin role in CIPP (Static Web App Role Management) in order to use the Onboarding Wizard
+
+###From CIPP:
+- Go to https://cipp.interconnekt.com.au/tenant/administration/tenant-onboarding-wizard
+- Click the Create GDAP Invite button
+- Click the Select All tick box to select all the available mapped GDAP Roles
+- Click Next
+- Select 1 for number of invites, then click the Next button
+- Press Submit
+- You will now see a screen with 2 x URL links and the message GDAP relationship invite created. 
+- Copy the Invite Link URL and keep in your clipboard, you will paste the URL into the Incognito Window that you are logged into the customer tenant with in the next section
+
+###From an Incognito Window in Edge:
+- Open a new Incognito Window in Edge and sign in to the customer tenant as a Global Admin
+- Paste the Invite Link URL from your Clipboard
+- Approve the GDAP Relationship by selecting the tick-box and pressing the Approve All button
+- Click the Yes button
+- Refresh the page and confirm that your CSP Partner Tenant is listed under the GDAP section
+
+###From CIPP:
+- Wait 5-10 minutes so Microsoft back-end pulls the tenant into Partner Center (you can confirm the tenant is in Partner Center by going to the Customers > Administer and confirming the tenant is there
+- Once confirmed, click the second URL link from the Onboarding Wizard which is called Onboarding URL
+- The Onboarding URL link is to be run in the Partner tenant admin tab, not in the customer Incognito Window
+- If you get an approval for Azure Static Web apps in the customer’s tenant - you have pasted this link into the wrong window
+- Click the tick-box next to the tenant and then press Next
+- Toggle the Map missing groups to GDAP Roles and Add CIPP SAM user to missing groups selectors
+- Click the Select All tick box to select all the available mapped GDAP Roles
+- Click Next
+- Open the drop-down to view the progress of the Onboarding Wizard
+
+> [!NOTE]
+> The Wizard may take 1-2 minutes to start
+> Wait until the Onboarding Wizard completes and you all : :white_check_mark:
+
+> [!TIP]
+> If CPV Refresh fails, you may need to approve additional permissions on the CIPP-SAM App Registration in the Partner Tenant
+
+You should now refresh the CIPP page and you should then see the Customer tenant in the tenant picker. 
