@@ -56,23 +56,72 @@ const restoreSettings = () => {
     // that's why we catch the error
   }
 
-  return value;
+  return value ? stripPersistedBrandingBlobs(stripServerManagedSettings(value)) : null;
 };
 
 const deleteSettings = () => {
   storage.removeItem(STORAGE_KEY);
 };
 
-const storeSettings = (value) => {
-  storage.setItem(STORAGE_KEY, JSON.stringify(value));
+/**
+ * Branding is no longer client settings — it is a request, cached by react-query under
+ * `BRANDING_QUERY_KEY` and read via `useBrandingSettings`. Anything a previous version of CIPP
+ * persisted here is dropped on load rather than migrated: it is a stale copy of server state, and
+ * its image payloads are what used to blow the localStorage quota once covers were uploaded.
+ */
+const stripPersistedBrandingBlobs = (settings) => {
+  if (!settings || typeof settings !== "object" || !("customBranding" in settings)) {
+    return settings;
+  }
+
+  const { customBranding: _legacyBranding, ...rest } = settings;
+  return rest;
 };
+
+const storeSettings = (value) => {
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(stripPersistedBrandingBlobs(value)));
+  } catch (err) {
+    console.error("[Settings Context] Failed to persist settings", err);
+    try {
+      // Drop a bloated legacy blob so future writes can succeed
+      storage.removeItem(STORAGE_KEY);
+      storage.setItem(STORAGE_KEY, JSON.stringify(stripPersistedBrandingBlobs(value)));
+    } catch (retryErr) {
+      console.error("[Settings Context] Failed to recover settings storage", retryErr);
+    }
+  }
+};
+
+const stripServerManagedSettings = (settings) => {
+  if (!settings || typeof settings !== "object") {
+    return settings;
+  }
+
+  const { bookmarks, ...cleanedSettings } = settings;
+  return cleanedSettings;
+};
+
+// First visit (no stored preference): follow the OS. 'browser' resolves against
+// prefers-color-scheme at render time in _app.js, so the app keeps tracking the
+// system preference until the user explicitly picks a mode with the theme toggle.
+const systemPrefersDark =
+  typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
 
 const initialSettings = {
   direction: "ltr",
-  paletteMode: "light",
+  paletteMode: systemPrefersDark ? "dark" : "light",
+  currentTheme: { value: "browser", label: "Browser Default" },
   pinNav: true,
   currentTenant: null,
   showDevtools: false,
+  showAdvancedTools: false,
+  persistFilters: false,
+  lastUsedFilters: {},
+  breadcrumbMode: "hierarchical",
+  bookmarkSidebar: true,
+  bookmarkPopover: false,
+  compactNav: false,
 };
 
 const initialState = {
@@ -85,6 +134,7 @@ export const SettingsContext = createContext({
   handleReset: () => {},
   handleUpdate: () => {},
   isCustom: false,
+  setLastUsedFilter: () => {},
 });
 
 export const SettingsProvider = (props) => {
@@ -95,13 +145,36 @@ export const SettingsProvider = (props) => {
     const restored = restoreSettings();
 
     if (restored) {
+      const cleanedRestored = restored;
+
+      if (!cleanedRestored.currentTheme && cleanedRestored.paletteMode) {
+        cleanedRestored.currentTheme = {
+          value: cleanedRestored.paletteMode,
+          label: cleanedRestored.paletteMode,
+        };
+      }
+
+      storeSettings(cleanedRestored);
+
       setState((prevState) => ({
         ...prevState,
-        ...restored,
+        ...cleanedRestored,
+        isInitialized: true,
+      }));
+    } else {
+      // No stored settings found, initialize with defaults
+      setState((prevState) => ({
+        ...prevState,
         isInitialized: true,
       }));
     }
   }, []);
+
+  useEffect(() => {
+    if (state.isInitialized) {
+      storeSettings(state);
+    }
+  }, [state]);
 
   const handleReset = useCallback(() => {
     deleteSettings();
@@ -113,15 +186,22 @@ export const SettingsProvider = (props) => {
 
   const handleUpdate = useCallback((settings) => {
     setState((prevState) => {
-      storeSettings({
+      // Filter out null and undefined values to prevent resetting settings
+      const filteredSettings = Object.entries(settings).reduce((acc, [key, value]) => {
+        if (key !== "bookmarks" && value !== null && value !== undefined) {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
+
+      const updatedSettings = stripServerManagedSettings({
         ...prevState,
-        ...settings,
+        ...filteredSettings,
       });
 
-      return {
-        ...prevState,
-        ...settings,
-      };
+      storeSettings(updatedSettings);
+
+      return updatedSettings;
     });
   }, []);
 
@@ -129,6 +209,7 @@ export const SettingsProvider = (props) => {
     return !isEqual(initialSettings, {
       direction: state.direction,
       paletteMode: state.paletteMode,
+      currentTheme: state.currentTheme,
       pinNav: state.pinNav,
     });
   }, [state]);
@@ -140,6 +221,19 @@ export const SettingsProvider = (props) => {
         handleReset,
         handleUpdate,
         isCustom,
+        setLastUsedFilter: (page, filter) => {
+          setState((prevState) => {
+            const updated = stripServerManagedSettings({
+              ...prevState,
+              lastUsedFilters: {
+                ...prevState.lastUsedFilters,
+                [page]: filter,
+              },
+            });
+            storeSettings(updated);
+            return updated;
+          });
+        },
       }}
     >
       {children}
